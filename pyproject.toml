@@ -1,0 +1,29 @@
+[project]
+name = "orgx"
+version = "1.0.0"
+description = "Python client for the OrgX v1 API"
+requires-python = ">=3.10"
+readme = "README.md"
+license = { text = "Proprietary" }
+authors = [{ name = "OrgX", email = "support@useorgx.com" }]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "License :: Other/Proprietary License",
+]
+
+[project.urls]
+Documentation = "https://docs.useorgx.com/docs/api/clients"
+Homepage = "https://useorgx.com"
+Repository = "https://github.com/useorgx/orgx-sdk-python"
+Issues = "https://github.com/useorgx/orgx-sdk-python/issues"
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["orgx_client*"]
+
+[tool.ruff]
+line-length = 100
