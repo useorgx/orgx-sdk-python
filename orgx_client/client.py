@@ -94,13 +94,15 @@ class OrgXClient:
                         workstream_id: Optional[str] = None, task_id: Optional[str] = None,
                         acknowledged_capsule_id: Optional[str] = None,
                         reader_tokenizer: Optional[str] = None, max_payload_tokens: Optional[int] = None,
-                        delivery_mode: Optional[str] = None, acknowledged_context_version: Optional[str] = None) -> Mapping[str, Any]:
+                        delivery_mode: Optional[str] = None, acknowledged_context_version: Optional[str] = None,
+                        response_profile: Optional[str] = None) -> Mapping[str, Any]:
         """Prepare current context; this response does not grant action authority."""
         body = {"workspace_id": workspace_id}
         for key, value in (("initiative_id", initiative_id), ("workstream_id", workstream_id),
                            ("task_id", task_id), ("acknowledged_capsule_id", acknowledged_capsule_id),
                            ("reader_tokenizer", reader_tokenizer), ("max_payload_tokens", max_payload_tokens),
-                           ("delivery_mode", delivery_mode), ("acknowledged_context_version", acknowledged_context_version)):
+                           ("delivery_mode", delivery_mode), ("acknowledged_context_version", acknowledged_context_version),
+                           ("response_profile", response_profile)):
             if value is not None:
                 body[key] = value
         return self._request("/context-pack", method="POST", body=body)["data"]
