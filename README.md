@@ -28,3 +28,18 @@ Sync requests a fresh full pack until the server supports verified coherent delt
 Inspect `context_delivery`: current best-effort capsules do not establish action
 authority, completeness, or measured model-token savings. Count expanded evidence
 in the receiving model’s input budget. Requires the app context-delivery release.
+
+
+## Portable context continuation
+
+```python
+first = client.sync_context(workspace_id)
+next_context = client.sync_context(workspace_id, previous=first)
+evidence = client.expand_context_evidence(artifact_id, expected_version=2)
+```
+
+Retain the returned continuation, including its exact serialized bytes, between
+calls. Each sync authenticates and prepares current context. The client validates
+full or delta transfer hashes and retries a missing or corrupted base once with
+a fresh read. Acknowledgement is transport state, not permission to act. Artifact
+expansion with an expected version returns an API conflict if the revision changed.
