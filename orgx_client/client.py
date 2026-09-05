@@ -12,6 +12,7 @@ from typing import Any, Iterator, Mapping, MutableMapping, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
+from .continuation import ContextContinuation, apply_context_transfer
 
 
 class OrgXApiError(RuntimeError):
@@ -91,23 +92,43 @@ class OrgXClient:
 
     def prepare_context(self, workspace_id: str, *, initiative_id: Optional[str] = None,
                         workstream_id: Optional[str] = None, task_id: Optional[str] = None,
-                        acknowledged_capsule_id: Optional[str] = None) -> Mapping[str, Any]:
+                        acknowledged_capsule_id: Optional[str] = None,
+                        reader_tokenizer: Optional[str] = None, max_payload_tokens: Optional[int] = None,
+                        delivery_mode: Optional[str] = None, acknowledged_context_version: Optional[str] = None) -> Mapping[str, Any]:
         """Prepare current context; this response does not grant action authority."""
         body = {"workspace_id": workspace_id}
         for key, value in (("initiative_id", initiative_id), ("workstream_id", workstream_id),
-                           ("task_id", task_id), ("acknowledged_capsule_id", acknowledged_capsule_id)):
+                           ("task_id", task_id), ("acknowledged_capsule_id", acknowledged_capsule_id),
+                           ("reader_tokenizer", reader_tokenizer), ("max_payload_tokens", max_payload_tokens),
+                           ("delivery_mode", delivery_mode), ("acknowledged_context_version", acknowledged_context_version)):
             if value is not None:
                 body[key] = value
         return self._request("/context-pack", method="POST", body=body)["data"]
 
-    def sync_context(self, workspace_id: str, acknowledged_capsule_id: str,
-                     **scope: Any) -> Mapping[str, Any]:
-        """Request full rebootstrap until coherent base verification is available."""
-        return self.prepare_context(workspace_id, acknowledged_capsule_id=acknowledged_capsule_id, **scope)
+    def sync_context(self, workspace_id: str, acknowledged_capsule_id: Optional[str] = None,
+                     *, previous: Optional[ContextContinuation] = None, **scope: Any) -> Any:
+        """Resume from a portable base, or use the legacy capsule rebootstrap form."""
+        if acknowledged_capsule_id is not None:
+            if previous is not None:
+                raise ValueError("Use one continuation acknowledgement format")
+            return self.prepare_context(workspace_id, acknowledged_capsule_id=acknowledged_capsule_id, **scope)
+        scope.pop("delivery_mode", None)
+        scope.pop("acknowledged_context_version", None)
+        response = self.prepare_context(workspace_id, delivery_mode="delta",
+            acknowledged_context_version=previous.version if previous else None, **scope)
+        try:
+            return apply_context_transfer(response, previous)
+        except ValueError:
+            if previous is None:
+                raise
+            return apply_context_transfer(self.prepare_context(workspace_id, delivery_mode="delta", **scope))
 
-    def expand_context_evidence(self, artifact_id: str) -> Mapping[str, Any]:
+    def expand_context_evidence(self, artifact_id: str, expected_version: Optional[int] = None) -> Mapping[str, Any]:
         """Read an artifact through the existing authorized API; account for its tokens."""
-        return self._request(f"/artifacts/{quote(artifact_id, safe='')}")["data"]
+        if expected_version is not None and (type(expected_version) is not int or expected_version < 1):
+            raise ValueError("Artifact version must be a positive integer")
+        suffix = f"?expected_version={expected_version}" if expected_version is not None else ""
+        return self._request(f"/artifacts/{quote(artifact_id, safe='')}{suffix}")["data"]
 
     def start_discovery_run(
         self,
