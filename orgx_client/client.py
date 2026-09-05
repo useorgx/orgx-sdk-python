@@ -550,6 +550,569 @@ class OrgXClient:
             "activate", workspace_id, process_id, expected_aggregate_version, idempotency_key
         )
 
+    def get_operating_process(
+        self, workspace_id: str, process_id: str
+    ) -> Mapping[str, Any]:
+        payload = self._request(
+            f"/operating-processes/{quote(process_id)}?workspace_id={quote(workspace_id)}"
+        )
+        return payload["data"]
+
+    def get_operating_map(
+        self, workspace_id: str, *, limit: Optional[int] = None
+    ) -> MutableMapping[str, Any]:
+        params = [f"workspace_id={quote(workspace_id)}"]
+        if limit is not None:
+            params.append(f"limit={quote(str(limit))}")
+        return self._request(f"/operating-map?{'&'.join(params)}")
+
+    def return_handoff(
+        self,
+        workspace_id: str,
+        handoff_id: str,
+        expected_aggregate_version: int,
+        *,
+        idempotency_key: str,
+    ) -> Mapping[str, Any]:
+        return self._handoff_transition(
+            "return", workspace_id, handoff_id, expected_aggregate_version, idempotency_key
+        )
+
+    def escalate_handoff(
+        self,
+        workspace_id: str,
+        handoff_id: str,
+        expected_aggregate_version: int,
+        *,
+        idempotency_key: str,
+    ) -> Mapping[str, Any]:
+        return self._handoff_transition(
+            "escalate", workspace_id, handoff_id, expected_aggregate_version, idempotency_key
+        )
+
+    def cancel_handoff(
+        self,
+        workspace_id: str,
+        handoff_id: str,
+        expected_aggregate_version: int,
+        *,
+        idempotency_key: str,
+    ) -> Mapping[str, Any]:
+        return self._handoff_transition(
+            "cancel", workspace_id, handoff_id, expected_aggregate_version, idempotency_key
+        )
+
+    def list_work(
+        self,
+        workspace_id: str,
+        *,
+        initiative_id: Optional[str] = None,
+        status: Optional[str] = None,
+        updated_since: Optional[str] = None,
+        cursor: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> MutableMapping[str, Any]:
+        """List owned work items; pass ``meta["nextCursor"]`` back as ``cursor``."""
+        params = [f"workspace_id={quote(workspace_id)}"]
+        if initiative_id:
+            params.append(f"initiative_id={quote(initiative_id)}")
+        if status:
+            params.append(f"status={quote(status)}")
+        if updated_since:
+            params.append(f"updated_since={quote(updated_since)}")
+        if cursor:
+            params.append(f"cursor={quote(cursor)}")
+        if limit is not None:
+            params.append(f"limit={quote(str(limit))}")
+        return self._request(f"/work?{'&'.join(params)}")
+
+    def get_work_task(self, workspace_id: str, task_id: str) -> Mapping[str, Any]:
+        """Read one work item with the ``concurrency`` block completion requires.
+
+        Echo ``concurrency.expected_updated_at`` back to ``complete_work``
+        exactly as received; the server compares it for exact equality.
+        """
+        payload = self._request(
+            f"/work/{quote(task_id)}?workspace_id={quote(workspace_id)}"
+        )
+        return payload["data"]
+
+    def create_initiative(
+        self,
+        *,
+        idempotency_key: str,
+        workspace_id: Optional[str] = None,
+        title: Optional[str] = None,
+        summary: Optional[str] = None,
+        plan: Optional[Mapping[str, Any]] = None,
+        plan_digest: Optional[str] = None,
+        proposal_id: Optional[str] = None,
+        proposal_digest: Optional[str] = None,
+        initiative_id: Optional[str] = None,
+        overrides: Optional[Mapping[str, Any]] = None,
+        expected_aggregate_version: Optional[int] = None,
+    ) -> Mapping[str, Any]:
+        """Create an initiative in one of the three contract forms.
+
+        Supply ``proposal_id`` + ``proposal_digest`` to commit a reviewed
+        proposal, ``plan`` + ``plan_digest`` to commit an inline plan, or
+        ``title`` (with optional ``summary``) for the starter scaffold.
+        """
+        body: dict[str, Any] = {}
+        if workspace_id:
+            body["workspace_id"] = workspace_id
+        if proposal_id or proposal_digest:
+            if not (proposal_id and proposal_digest):
+                raise ValueError(
+                    "proposal_id and proposal_digest must be supplied together"
+                )
+            body["proposal_id"] = proposal_id
+            body["proposal_digest"] = proposal_digest
+        elif plan is not None or plan_digest:
+            if plan is None or not plan_digest:
+                raise ValueError("plan and plan_digest must be supplied together")
+            body["plan"] = dict(plan)
+            body["plan_digest"] = plan_digest
+        elif title:
+            body["title"] = title
+            if summary is not None:
+                body["summary"] = summary
+        else:
+            raise ValueError(
+                "supply proposal_id+proposal_digest, plan+plan_digest, or title"
+            )
+        if "title" not in body:
+            if initiative_id:
+                body["initiative_id"] = initiative_id
+            if overrides is not None:
+                body["overrides"] = dict(overrides)
+            if expected_aggregate_version is not None:
+                body["expected_aggregate_version"] = expected_aggregate_version
+        return self._request(
+            "/initiatives",
+            method="POST",
+            idempotency_key=idempotency_key,
+            body=body,
+        )["data"]
+
+    def get_initiative(
+        self,
+        initiative_id: str,
+        *,
+        workspace_id: Optional[str] = None,
+        include: Optional[str] = None,
+    ) -> Mapping[str, Any]:
+        """Read an initiative; ``include`` is comma-separated (``tree,launches``)."""
+        params = []
+        if workspace_id:
+            params.append(f"workspace_id={quote(workspace_id)}")
+        if include:
+            params.append(f"include={quote(include)}")
+        suffix = f"?{'&'.join(params)}" if params else ""
+        payload = self._request(f"/initiatives/{quote(initiative_id)}{suffix}")
+        return payload["data"]
+
+    def propose_initiative_scaffold(
+        self,
+        title: str,
+        *,
+        idempotency_key: str,
+        workspace_id: Optional[str] = None,
+        summary: Optional[str] = None,
+        prompt: Optional[str] = None,
+        goal_ids: Optional[list[str]] = None,
+        context: Optional[Mapping[str, Any]] = None,
+        depth: Optional[str] = None,
+        workstreams: Optional[list[Mapping[str, Any]]] = None,
+        agent_assignment: Optional[str] = None,
+    ) -> Mapping[str, Any]:
+        body: dict[str, Any] = {"title": title}
+        if workspace_id:
+            body["workspace_id"] = workspace_id
+        if summary is not None:
+            body["summary"] = summary
+        if prompt is not None:
+            body["prompt"] = prompt
+        if goal_ids is not None:
+            body["goal_ids"] = list(goal_ids)
+        if context is not None:
+            body["context"] = dict(context)
+        if depth:
+            body["depth"] = depth
+        if workstreams is not None:
+            body["workstreams"] = [dict(workstream) for workstream in workstreams]
+        if agent_assignment:
+            body["agent_assignment"] = agent_assignment
+        return self._request(
+            "/initiatives/proposals",
+            method="POST",
+            idempotency_key=idempotency_key,
+            body=body,
+        )["data"]
+
+    def get_initiative_scaffold_proposal(
+        self, proposal_id: str, *, workspace_id: Optional[str] = None
+    ) -> Mapping[str, Any]:
+        suffix = f"?workspace_id={quote(workspace_id)}" if workspace_id else ""
+        payload = self._request(f"/initiatives/proposals/{quote(proposal_id)}{suffix}")
+        return payload["data"]
+
+    def create_decision(
+        self,
+        workspace_id: str,
+        title: str,
+        *,
+        idempotency_key: Optional[str] = None,
+        description: Optional[str] = None,
+        shape: Optional[str] = None,
+        shape_context: Optional[Mapping[str, Any]] = None,
+        urgency: Optional[str] = None,
+        blocks_task: Optional[bool] = None,
+        task_id: Optional[str] = None,
+        initiative_id: Optional[str] = None,
+    ) -> Mapping[str, Any]:
+        """Raise a decision for a human ruling; replay safety is caller-owned."""
+        body: dict[str, Any] = {"workspace_id": workspace_id, "title": title}
+        if description is not None:
+            body["description"] = description
+        if shape:
+            body["shape"] = shape
+        if shape_context is not None:
+            body["shape_context"] = dict(shape_context)
+        if urgency:
+            body["urgency"] = urgency
+        if blocks_task is not None:
+            body["blocks_task"] = blocks_task
+        if task_id:
+            body["task_id"] = task_id
+        if initiative_id:
+            body["initiative_id"] = initiative_id
+        return self._request(
+            "/decisions",
+            method="POST",
+            idempotency_key=idempotency_key,
+            body=body,
+        )["decision"]
+
+    def list_decisions(
+        self,
+        workspace_id: str,
+        *,
+        shape: Optional[str] = None,
+        urgency: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> list[Mapping[str, Any]]:
+        params = [f"workspace_id={quote(workspace_id)}"]
+        if shape:
+            params.append(f"shape={quote(shape)}")
+        if urgency:
+            params.append(f"urgency={quote(urgency)}")
+        if status:
+            params.append(f"status={quote(status)}")
+        if limit is not None:
+            params.append(f"limit={quote(str(limit))}")
+        payload = self._request(f"/decisions?{'&'.join(params)}")
+        return list(payload["decisions"])
+
+    def list_artifact_types(self) -> list[Mapping[str, Any]]:
+        """List the global artifact type vocabulary ``create_artifact`` accepts."""
+        payload = self._request("/artifact-types")
+        return list(payload["data"])
+
+    def create_artifact(
+        self,
+        entity_type: str,
+        entity_id: str,
+        name: str,
+        artifact_type: str,
+        *,
+        idempotency_key: Optional[str] = None,
+        artifact_url: Optional[str] = None,
+        external_url: Optional[str] = None,
+        description: Optional[str] = None,
+        preview_markdown: Optional[str] = None,
+        initiative_id: Optional[str] = None,
+        status: Optional[str] = None,
+        metadata: Optional[Mapping[str, Any]] = None,
+        created_by_type: Optional[str] = None,
+        created_by_id: Optional[str] = None,
+    ) -> MutableMapping[str, Any]:
+        """Register produced work; one of ``artifact_url`` or ``external_url`` is required."""
+        body: dict[str, Any] = {
+            "entity_type": entity_type,
+            "entity_id": entity_id,
+            "name": name,
+            "artifact_type": artifact_type,
+        }
+        if artifact_url:
+            body["artifact_url"] = artifact_url
+        if external_url:
+            body["external_url"] = external_url
+        if description is not None:
+            body["description"] = description
+        if preview_markdown is not None:
+            body["preview_markdown"] = preview_markdown
+        if initiative_id:
+            body["initiative_id"] = initiative_id
+        if status:
+            body["status"] = status
+        if metadata is not None:
+            body["metadata"] = dict(metadata)
+        if created_by_type:
+            body["created_by_type"] = created_by_type
+        if created_by_id:
+            body["created_by_id"] = created_by_id
+        return self._request(
+            "/artifacts",
+            method="POST",
+            idempotency_key=idempotency_key,
+            body=body,
+        )
+
+    def list_artifacts(
+        self,
+        workspace_id: str,
+        *,
+        initiative_id: Optional[str] = None,
+        task_id: Optional[str] = None,
+        status: Optional[str] = None,
+        since: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> list[Mapping[str, Any]]:
+        params = [f"workspace_id={quote(workspace_id)}"]
+        if initiative_id:
+            params.append(f"initiative_id={quote(initiative_id)}")
+        if task_id:
+            params.append(f"task_id={quote(task_id)}")
+        if status:
+            params.append(f"status={quote(status)}")
+        if since:
+            params.append(f"since={quote(since)}")
+        if limit is not None:
+            params.append(f"limit={quote(str(limit))}")
+        payload = self._request(f"/artifacts?{'&'.join(params)}")
+        return list(payload["artifacts"])
+
+    def list_artifacts_by_entity(
+        self,
+        entity_type: str,
+        entity_id: str,
+        *,
+        kind: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> list[Mapping[str, Any]]:
+        params = [
+            f"entity_type={quote(entity_type)}",
+            f"entity_id={quote(entity_id)}",
+        ]
+        if kind:
+            params.append(f"kind={quote(kind)}")
+        if limit is not None:
+            params.append(f"limit={quote(str(limit))}")
+        payload = self._request(f"/artifacts/by-entity?{'&'.join(params)}")
+        return list(payload["artifacts"])
+
+    def get_artifact(self, artifact_id: str) -> MutableMapping[str, Any]:
+        """Read one artifact with its entity relationships."""
+        return self._request(f"/artifacts/{quote(artifact_id)}")
+
+    def control_run(
+        self,
+        run_id: str,
+        action: str,
+        *,
+        idempotency_key: Optional[str] = None,
+        checkpoint_id: Optional[str] = None,
+        reason: Optional[str] = None,
+    ) -> Mapping[str, Any]:
+        """Apply ``pause``, ``resume``, ``cancel``, or ``rollback`` to a run.
+
+        ``checkpoint_id`` is required for ``rollback``.
+        """
+        body: dict[str, Any] = {}
+        if checkpoint_id:
+            body["checkpointId"] = checkpoint_id
+        if reason is not None:
+            body["reason"] = reason
+        return self._request(
+            f"/runs/{quote(run_id)}/actions/{quote(action)}",
+            method="POST",
+            idempotency_key=idempotency_key,
+            body=body or None,
+        )["data"]
+
+    def apply_lifecycle_action(
+        self,
+        level: str,
+        node_id: str,
+        action: str,
+        *,
+        idempotency_key: Optional[str] = None,
+    ) -> MutableMapping[str, Any]:
+        """Pause, resume, retry, or cancel an initiative, workstream, milestone, task, or run."""
+        return self._request(
+            "/lifecycle",
+            method="POST",
+            idempotency_key=idempotency_key,
+            body={"level": level, "id": node_id, "action": action},
+        )
+
+    def import_agent_work_receipt(
+        self,
+        receipt: Mapping[str, Any],
+        *,
+        idempotency_key: str,
+        workspace_id: Optional[str] = None,
+    ) -> MutableMapping[str, Any]:
+        """Validate and store a portable Agent Work Receipt in the workspace."""
+        body: dict[str, Any] = {"receipt": dict(receipt)}
+        if workspace_id:
+            body["workspace_id"] = workspace_id
+        return self._request(
+            "/agent-work-receipts",
+            method="POST",
+            idempotency_key=idempotency_key,
+            body=body,
+        )
+
+    def get_agent_work_receipt_validator(self) -> MutableMapping[str, Any]:
+        """Get the supported receipt schema, limits, and a runnable example."""
+        return self._request("/agent-work-receipts/validate")
+
+    def validate_agent_work_receipt(
+        self, receipt: Mapping[str, Any]
+    ) -> MutableMapping[str, Any]:
+        """Validate a portable Agent Work Receipt without storing it."""
+        return self._request(
+            "/agent-work-receipts/validate",
+            method="POST",
+            body=dict(receipt),
+        )
+
+    def get_workload_doctor_metadata(self) -> MutableMapping[str, Any]:
+        """Get the workload diagnosis request schema and a runnable example."""
+        return self._request("/doctor/workload")
+
+    def diagnose_workload_boundaries(
+        self,
+        workload: Mapping[str, Any],
+        *,
+        schema_version: str = "workload-diagnosis/0.1",
+    ) -> MutableMapping[str, Any]:
+        """Score a workload across time, agents, systems, authority, and accountability."""
+        return self._request(
+            "/doctor/workload",
+            method="POST",
+            body={"schema_version": schema_version, "workload": dict(workload)},
+        )
+
+    def claim_dedup_fingerprint(
+        self,
+        source: str,
+        event_key: str,
+        *,
+        idempotency_key: Optional[str] = None,
+        initiative_id: Optional[str] = None,
+        ttl_seconds: Optional[int] = None,
+        active_run_id: Optional[str] = None,
+    ) -> MutableMapping[str, Any]:
+        """Claim a durable duplicate-trigger fingerprint; the first claimant wins."""
+        body: dict[str, Any] = {"source": source, "event_key": event_key}
+        if initiative_id:
+            body["initiative_id"] = initiative_id
+        if ttl_seconds is not None:
+            body["ttl_seconds"] = ttl_seconds
+        if active_run_id:
+            body["active_run_id"] = active_run_id
+        return self._request(
+            "/live/dedup/claim",
+            method="POST",
+            idempotency_key=idempotency_key,
+            body=body,
+        )
+
+    def create_estimate(
+        self,
+        prompt: str,
+        content_types: list[str],
+        *,
+        variant_count: Optional[int] = None,
+        brand_url: Optional[str] = None,
+        brand_id: Optional[str] = None,
+        platform: Optional[str] = None,
+    ) -> MutableMapping[str, Any]:
+        """Calculate the price and delivery range for a Content Studio request."""
+        body: dict[str, Any] = {
+            "prompt": prompt,
+            "contentTypes": list(content_types),
+        }
+        if variant_count is not None:
+            body["variantCount"] = variant_count
+        if brand_url:
+            body["brandUrl"] = brand_url
+        if brand_id:
+            body["brandId"] = brand_id
+        if platform:
+            body["platform"] = platform
+        return self._request("/studio/estimate", method="POST", body=body)
+
+    def get_showcase(
+        self,
+        *,
+        query: Optional[str] = None,
+        content_type: Optional[str] = None,
+        industry: Optional[str] = None,
+        style: Optional[str] = None,
+        featured: Optional[bool] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+    ) -> MutableMapping[str, Any]:
+        """Browse completed Content Studio examples."""
+        params = []
+        if query:
+            params.append(f"query={quote(query)}")
+        if content_type:
+            params.append(f"contentType={quote(content_type)}")
+        if industry:
+            params.append(f"industry={quote(industry)}")
+        if style:
+            params.append(f"style={quote(style)}")
+        if featured is not None:
+            params.append(f"featured={'true' if featured else 'false'}")
+        if limit is not None:
+            params.append(f"limit={quote(str(limit))}")
+        if offset is not None:
+            params.append(f"offset={quote(str(offset))}")
+        suffix = f"?{'&'.join(params)}" if params else ""
+        return self._request(f"/studio/showcase{suffix}")
+
+    def create_checkout(self, estimate_id: str) -> MutableMapping[str, Any]:
+        """Create a checkout session for an accepted Content Studio estimate."""
+        return self._request(
+            "/studio/checkout",
+            method="POST",
+            body={"estimateId": estimate_id},
+        )
+
+    def _handoff_transition(
+        self,
+        action: str,
+        workspace_id: str,
+        handoff_id: str,
+        expected_aggregate_version: int,
+        idempotency_key: str,
+    ) -> Mapping[str, Any]:
+        return self._request(
+            f"/handoffs/{quote(handoff_id)}/{action}",
+            method="POST",
+            idempotency_key=idempotency_key,
+            body={
+                "workspace_id": workspace_id,
+                "expected_aggregate_version": expected_aggregate_version,
+            },
+        )["data"]
+
     def _transition(
         self,
         action: str,
