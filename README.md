@@ -43,3 +43,7 @@ calls. Each sync authenticates and prepares current context. The client validate
 full or delta transfer hashes and retries a missing or corrupted base once with
 a fresh read. Acknowledgement is transport state, not permission to act. Artifact
 expansion with an expected version returns an API conflict if the revision changed.
+
+## Prepared context and portable continuation
+
+Version 1.1 adds `response_profile: "prepared"` (Python: `response_profile="prepared"`) to context preparation. This requests the compact direct response from the deployed API. Use the full profile for acknowledged delta transfer; prepared delivery and delta mode cannot be combined. The existing continuation helpers validate exact source bytes and recover a lost base with a fresh authorized read. Artifact expansion can require an exact current version. These protocol checks do not establish a native client handoff, task correctness, human acceptance, or a performance SLA.

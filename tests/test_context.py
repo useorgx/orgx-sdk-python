@@ -6,9 +6,9 @@ from orgx_client.client import OrgXClient
 class ContextTransportTests(unittest.TestCase):
     def test_sync_preserves_scope_and_acknowledged_base(self):
         with patch.object(OrgXClient, '_request', return_value={'data': {'context_delivery': {'base_verified': False}}}) as request:
-            result = OrgXClient().sync_context('w', 'capsule_base', task_id='t')
+            result = OrgXClient().sync_context('w', 'capsule_base', task_id='t', response_profile='prepared')
             request.assert_called_once_with('/context-pack', method='POST', body={
-                'workspace_id': 'w', 'task_id': 't', 'acknowledged_capsule_id': 'capsule_base'})
+                'workspace_id': 'w', 'task_id': 't', 'acknowledged_capsule_id': 'capsule_base', 'response_profile': 'prepared'})
             self.assertFalse(result['context_delivery']['base_verified'])
 
     def test_expansion_encodes_artifact_id(self):
