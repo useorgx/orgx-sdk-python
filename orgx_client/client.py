@@ -89,6 +89,26 @@ class OrgXClient:
     base_url: str = "https://useorgx.com/api/v1"
     timeout_seconds: float = 30.0
 
+    def prepare_context(self, workspace_id: str, *, initiative_id: Optional[str] = None,
+                        workstream_id: Optional[str] = None, task_id: Optional[str] = None,
+                        acknowledged_capsule_id: Optional[str] = None) -> Mapping[str, Any]:
+        """Prepare current context; this response does not grant action authority."""
+        body = {"workspace_id": workspace_id}
+        for key, value in (("initiative_id", initiative_id), ("workstream_id", workstream_id),
+                           ("task_id", task_id), ("acknowledged_capsule_id", acknowledged_capsule_id)):
+            if value is not None:
+                body[key] = value
+        return self._request("/context-pack", method="POST", body=body)["data"]
+
+    def sync_context(self, workspace_id: str, acknowledged_capsule_id: str,
+                     **scope: Any) -> Mapping[str, Any]:
+        """Request full rebootstrap until coherent base verification is available."""
+        return self.prepare_context(workspace_id, acknowledged_capsule_id=acknowledged_capsule_id, **scope)
+
+    def expand_context_evidence(self, artifact_id: str) -> Mapping[str, Any]:
+        """Read an artifact through the existing authorized API; account for its tokens."""
+        return self._request(f"/artifacts/{quote(artifact_id, safe='')}")["data"]
+
     def start_discovery_run(
         self,
         workspace_id: str,
