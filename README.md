@@ -55,3 +55,20 @@ revision differs. Include expanded evidence in the receiving model's input budge
 
 Transport savings do not establish model-token savings, task correctness, human
 acceptance, or a performance SLA.
+
+
+## Controller reconciliation
+
+Read the current controller revision before requesting a shadow reconciliation:
+
+```python
+status = client.get_controller_status(workspace_id, "growth")
+result = client.reconcile_controller(
+    workspace_id,
+    "growth",
+    spec_revision=status["data"]["spec_revision"],
+    idempotency_key="growth-review-2026-09-09",
+)
+```
+
+Reuse the same idempotency key only when retrying the same request. Both calls return the server envelope, including receipts and limitations. A healthy historical run does not establish current enablement; inspect the reported limitations. Reconciliation creates shadow proposals for human review and grants no execution or policy authority. The server validates workspace access, activation, revision and evidence freshness.

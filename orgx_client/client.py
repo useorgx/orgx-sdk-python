@@ -12,6 +12,7 @@ from typing import Any, Iterator, Mapping, MutableMapping, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
+from .controllers import ControllerOperations
 from .continuation import ContextContinuation, apply_context_transfer
 
 
@@ -82,7 +83,7 @@ class EventStreamSubscription:
 
 
 @dataclass(frozen=True)
-class OrgXClient:
+class OrgXClient(ControllerOperations):
     """Synchronous OrgX v1 client using Python's standard library only."""
 
     api_key: Optional[str] = None
