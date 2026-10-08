@@ -11,7 +11,8 @@ from dataclasses import dataclass
 from typing import Any, Iterator, Mapping, MutableMapping, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
-from urllib.request import Request, urlopen
+from urllib.request import Request
+from ._transport import urlopen
 from .controllers import ControllerOperations
 from .continuation import ContextContinuation, apply_context_transfer
 
