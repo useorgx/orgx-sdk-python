@@ -72,3 +72,12 @@ result = client.reconcile_controller(
 ```
 
 Reuse the same idempotency key only when retrying the same request. Both calls return the server envelope, including receipts and limitations. A healthy historical run does not establish current enablement; inspect the reported limitations. Reconciliation creates shadow proposals for human review and grants no execution or policy authority. The server validates workspace access, activation, revision and evidence freshness.
+
+## About OrgX
+
+[OrgX](https://useorgx.com) is proof for AI-delivered work — the operating record your agents and tools share. Agents in ChatGPT, Claude, Cursor, and Codex work from one record of decisions, approvals, and work receipts.
+
+- [OrgX FAQ](https://useorgx.com/faq): what it is, who it's for, and what it costs
+- [Agent work receipts](https://useorgx.com/agent-work-receipts): how finished agent work is checked and signed off
+- [Pricing](https://useorgx.com/pricing)
+- Hosted MCP server: [useorgx/orgx-mcp](https://github.com/useorgx/orgx-mcp)
